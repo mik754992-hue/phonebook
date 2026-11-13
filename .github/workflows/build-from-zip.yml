@@ -1,0 +1,45 @@
+# Put this file in your repo at .github/workflows/ next to phonebook-mod.zip
+# (the zip sits in the repo root). On every push it unzips the project and builds it.
+name: build-from-zip
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          ZIP=$(ls ./*.zip 2>/dev/null | head -n1 || true)
+          if [ -z "$ZIP" ]; then echo "No .zip found in repo root"; exit 1; fi
+          echo "Unzipping $ZIP"
+          mkdir -p unzipped
+          unzip -q "$ZIP" -d unzipped
+          DIR=unzipped
+          # if the zip has a single top-level folder, build inside it
+          if [ "$(ls -A unzipped | wc -l)" -eq 1 ] && [ -d "unzipped/$(ls -A unzipped)" ]; then
+            DIR="unzipped/$(ls -A unzipped)"
+          fi
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Build
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle build --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phonebook-jar
+          path: ${{ env.PROJECT_DIR }}/build/libs/*.jar
